@@ -2,20 +2,15 @@ package com.example.drivelog.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -44,7 +39,10 @@ fun niceAxis(dataMax: Float, minTop: Float, maxTicks: Int): Axis {
 
 /**
  * Scatter + line profile with depth on the Y axis, increasing DOWNWARD (0 at the top), as in a
- * driving log. The X axis labels sit along the top edge next to depth 0.
+ * driving log. The X axis tick labels sit along the top edge next to depth 0, with [xLabel]
+ * centered above them; [yLabel] is rotated and centered along the left edge.
+ *
+ * The margins around the plot are measured from the text so larger fonts never get clipped.
  *
  * @param xValue which quantity of a [ProfilePoint] goes on the X axis
  * @param fixedXAxis a fixed X axis, or null to size it from the data
@@ -52,98 +50,105 @@ fun niceAxis(dataMax: Float, minTop: Float, maxTicks: Int): Axis {
  */
 @Composable
 fun ProfilePlot(
-    title: String,
     points: List<ProfilePoint>,
     xValue: (ProfilePoint) -> Int,
     fixedXAxis: Axis?,
+    xLabel: String,
+    yLabel: String,
     modifier: Modifier = Modifier,
     minXTop: Float = 20f,
 ) {
     val measurer = rememberTextMeasurer()
-    val labelStyle = TextStyle(color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Black)
+    val tickStyle = TextStyle(color = Ink, fontSize = TICK_FONT_SP.sp, fontWeight = FontWeight.Black)
+    val axisStyle = TextStyle(color = Ink, fontSize = AXIS_FONT_SP.sp, fontWeight = FontWeight.Black)
 
-    Column(
-        modifier = modifier
-            .background(Paper, RoundedCornerShape(8.dp))
-            .border(BorderWidth, Ink, RoundedCornerShape(8.dp))
-            .padding(4.dp)
-    ) {
-        Text(
-            title,
-            color = Ink,
-            fontSize = 15.sp,
-            lineHeight = 17.sp,
-            fontWeight = FontWeight.Black,
-            modifier = Modifier.fillMaxWidth(),
+    Canvas(modifier.background(Paper)) {
+        val xAxis = fixedXAxis ?: niceAxis(
+            dataMax = (points.maxOfOrNull(xValue) ?: 0).toFloat(), minTop = minXTop, maxTicks = 5
         )
-        Canvas(Modifier.fillMaxSize()) {
-            val xAxis = fixedXAxis ?: niceAxis(
-                dataMax = (points.maxOfOrNull(xValue) ?: 0).toFloat(), minTop = minXTop, maxTicks = 5
-            )
-            val yAxis = niceAxis(
-                dataMax = (points.maxOfOrNull { it.depth } ?: 0).toFloat(), minTop = 10f, maxTicks = 8
-            )
+        val yAxis = niceAxis(
+            dataMax = (points.maxOfOrNull { it.depth } ?: 0).toFloat(), minTop = 10f, maxTicks = 8
+        )
 
-            val left = 40.dp.toPx()
-            val top = 22.dp.toPx()
-            val right = size.width - 14.dp.toPx()
-            val bottom = size.height - 6.dp.toPx()
-            val w = right - left
-            val h = bottom - top
-            if (w <= 0f || h <= 0f) return@Canvas
+        // Measure once to size the margins.
+        val xTitle = measurer.measure(xLabel, axisStyle)
+        val yTitle = measurer.measure(yLabel, axisStyle)
+        val widestY = measurer.measure(yAxis.top.toInt().toString(), tickStyle)
+        val widestX = measurer.measure(xAxis.top.toInt().toString(), tickStyle)
+        val gap = 4.dp.toPx()
 
-            fun px(x: Float) = left + x / xAxis.top * w
-            fun py(y: Float) = top + y / yAxis.top * h // depth 0 at the top, growing downward
+        val left = yTitle.size.height + widestY.size.width + gap * 3
+        val top = xTitle.size.height + widestX.size.height + gap * 3
+        val right = size.width - widestX.size.width / 2f - gap
+        val bottom = size.height - widestY.size.height / 2f - gap
+        val w = right - left
+        val h = bottom - top
+        if (w <= 0f || h <= 0f) return@Canvas
 
-            // Grid + tick labels.
-            var y = 0f
-            while (y <= yAxis.top + 0.001f) {
-                val yy = py(y)
-                drawLine(GridGray, Offset(left, yy), Offset(right, yy), strokeWidth = 1.dp.toPx())
-                val text = y.toInt().toString()
-                val tl = measurer.measure(text, labelStyle)
-                drawText(
-                    tl,
-                    topLeft = Offset(left - 4.dp.toPx() - tl.size.width, yy - tl.size.height / 2f)
-                )
-                y += yAxis.step
-            }
-            var x = 0f
-            while (x <= xAxis.top + 0.001f) {
-                val xx = px(x)
-                drawLine(GridGray, Offset(xx, top), Offset(xx, bottom), strokeWidth = 1.dp.toPx())
-                val text = x.toInt().toString()
-                val tl = measurer.measure(text, labelStyle)
-                val tx = (xx - tl.size.width / 2f).coerceIn(left - tl.size.width / 2f, size.width - tl.size.width.toFloat())
-                drawText(tl, topLeft = Offset(tx, top - 4.dp.toPx() - tl.size.height))
-                x += xAxis.step
-            }
+        fun px(x: Float) = left + x / xAxis.top * w
+        fun py(y: Float) = top + y / yAxis.top * h // depth 0 at the top, growing downward
 
-            // Data: connecting line, then markers.
-            if (points.size > 1) {
-                val path = Path()
-                points.forEachIndexed { i, p ->
-                    val o = Offset(px(xValue(p).toFloat()), py(p.depth.toFloat()))
-                    if (i == 0) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y)
-                }
-                drawPath(
-                    path, Ink,
-                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                )
-            }
-            points.forEach { p ->
-                val o = Offset(px(xValue(p).toFloat()), py(p.depth.toFloat()))
-                drawCircle(Ink, radius = 5.dp.toPx(), center = o)
-                drawCircle(Paper, radius = 2.dp.toPx(), center = o)
-            }
+        // Grid + Y tick labels (right-aligned against the plot).
+        var y = 0f
+        while (y <= yAxis.top + 0.001f) {
+            val yy = py(y)
+            drawLine(GridGray, Offset(left, yy), Offset(right, yy), strokeWidth = 1.dp.toPx())
+            val tl = measurer.measure(y.toInt().toString(), tickStyle)
+            drawText(tl, topLeft = Offset(left - gap - tl.size.width, yy - tl.size.height / 2f))
+            y += yAxis.step
+        }
+        // Grid + X tick labels (along the top edge).
+        var x = 0f
+        while (x <= xAxis.top + 0.001f) {
+            val xx = px(x)
+            drawLine(GridGray, Offset(xx, top), Offset(xx, bottom), strokeWidth = 1.dp.toPx())
+            val tl = measurer.measure(x.toInt().toString(), tickStyle)
+            val tx = (xx - tl.size.width / 2f).coerceIn(0f, size.width - tl.size.width.toFloat())
+            drawText(tl, topLeft = Offset(tx, top - gap - tl.size.height))
+            x += xAxis.step
+        }
 
-            // Frame on top.
-            drawRect(
-                Ink,
-                topLeft = Offset(left, top),
-                size = androidx.compose.ui.geometry.Size(w, h),
-                style = Stroke(width = 2.dp.toPx())
+        // Axis titles: X centered above the tick labels, Y rotated and centered on the left.
+        drawText(
+            xTitle,
+            topLeft = Offset(left + w / 2f - xTitle.size.width / 2f, 0f),
+        )
+        val cx = yTitle.size.height / 2f
+        val cy = top + h / 2f
+        rotate(degrees = -90f, pivot = Offset(cx, cy)) {
+            drawText(
+                yTitle,
+                topLeft = Offset(cx - yTitle.size.width / 2f, cy - yTitle.size.height / 2f),
             )
         }
+
+        // Data: connecting line, then markers.
+        if (points.size > 1) {
+            val path = Path()
+            points.forEachIndexed { i, p ->
+                val o = Offset(px(xValue(p).toFloat()), py(p.depth.toFloat()))
+                if (i == 0) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y)
+            }
+            drawPath(
+                path, Ink,
+                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
+        }
+        points.forEach { p ->
+            val o = Offset(px(xValue(p).toFloat()), py(p.depth.toFloat()))
+            drawCircle(Ink, radius = 5.dp.toPx(), center = o)
+            drawCircle(Paper, radius = 2.dp.toPx(), center = o)
+        }
+
+        // Plot frame on top of the data.
+        drawRect(
+            Ink,
+            topLeft = Offset(left, top),
+            size = Size(w, h),
+            style = Stroke(width = 2.dp.toPx())
+        )
     }
 }
+
+private const val TICK_FONT_SP = 18
+private const val AXIS_FONT_SP = 24

@@ -6,8 +6,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.draw.clip
+import com.example.drivelog.ui.theme.ActionBlue
+import com.example.drivelog.ui.theme.PlayGreen
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
@@ -88,6 +101,113 @@ fun BigButton(
         contentAlignment = Alignment.Center,
     ) {
         label(fg)
+    }
+}
+
+/**
+ * Large Android-style on/off slider, sized like the old Play/Stop button. Tap it, or drag the
+ * thumb toward the other end. It only reports the request through [onToggle]; the thumb follows
+ * [checked], so a confirmation dialog can veto the change.
+ */
+@Composable
+fun BigSwitch(
+    checked: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    width: Dp = 112.dp,
+    height: Dp = 72.dp,
+    description: String = "Pile session",
+) {
+    val inset = 8.dp
+    val thumb = height - inset * 2
+    val travel = width - thumb - inset * 2
+    val thumbX by animateDpAsState(if (checked) travel else 0.dp, label = "switchThumb")
+    var drag by remember { mutableFloatStateOf(0f) }
+
+    val trackColor = if (checked) PlayGreen else DisabledFill
+    val thumbColor = if (checked) Paper else Ink
+    val textColor = if (checked) Paper else Ink
+
+    Box(
+        modifier = modifier
+            .size(width, height)
+            .background(trackColor, CircleShape)
+            .border(BorderWidth, Ink, CircleShape)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = { onToggle() })
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { drag += it },
+                onDragStarted = { drag = 0f },
+                onDragStopped = {
+                    val towardOn = !checked && drag > DRAG_TOGGLE_PX
+                    val towardOff = checked && drag < -DRAG_TOGGLE_PX
+                    if (towardOn || towardOff) onToggle()
+                },
+            )
+            .semantics { contentDescription = "$description: ${if (checked) "on" else "off"}" },
+    ) {
+        // The state word sits on the side the thumb has moved away from.
+        Text(
+            text = if (checked) "ON" else "OFF",
+            color = textColor,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Black,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier
+                .align(if (checked) Alignment.CenterStart else Alignment.CenterEnd)
+                .padding(horizontal = 12.dp),
+        )
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = inset + thumbX)
+                .size(thumb)
+                .background(thumbColor, CircleShape)
+        )
+    }
+}
+
+private const val DRAG_TOGGLE_PX = 20f
+
+/**
+ * Standard filled phone-style action button: rounded corners, soft elevation, ripple, and a
+ * flat grey look when disabled.
+ */
+@Composable
+fun ActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    height: Dp = 72.dp,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.height(height),
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = ActionBlue,
+            contentColor = Paper,
+            disabledContainerColor = DisabledFill,
+            disabledContentColor = DisabledInk,
+        ),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 4.dp,
+            pressedElevation = 1.dp,
+            disabledElevation = 0.dp,
+        ),
+        contentPadding = PaddingValues(horizontal = 8.dp),
+    ) {
+        Text(
+            text = text,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 

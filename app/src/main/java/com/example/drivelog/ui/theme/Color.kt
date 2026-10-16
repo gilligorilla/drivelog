@@ -11,6 +11,7 @@ val DisabledInk = Color(0xFF707070)
 
 val PlayGreen = Color(0xFF006B1E)
 val MicGreen = Color(0xFF1B7A2B)
+val ActionBlue = Color(0xFF0B3D91)
 val StopRed = Color(0xFFC00000)
 val SignalYellow = Color(0xFFFFD600)
 val AlertRed = Color(0xFFB00000)

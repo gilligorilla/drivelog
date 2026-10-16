@@ -38,11 +38,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -53,7 +54,6 @@ import com.example.drivelog.session.StorageStatus
 import com.example.drivelog.ui.theme.AlertRed
 import com.example.drivelog.ui.theme.DisabledFill
 import com.example.drivelog.ui.theme.DisabledInk
-import com.example.drivelog.ui.theme.GridGray
 import com.example.drivelog.ui.theme.Ink
 import com.example.drivelog.ui.theme.Paper
 import com.example.drivelog.ui.theme.PlayGreen
@@ -68,12 +68,13 @@ import kotlinx.coroutines.launch
 private fun DialogCard(
     title: String,
     modifier: Modifier = Modifier,
+    maxWidth: Dp = 560.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth(0.94f)
-            .widthIn(max = 560.dp)
+            .widthIn(max = maxWidth)
             .background(Paper, RoundedCornerShape(12.dp))
             .border(BorderWidth, Ink, RoundedCornerShape(12.dp))
             .padding(12.dp)
@@ -208,8 +209,9 @@ fun FinalizeConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
 // ------------------------------------------------------------------------------------ numbers
 
 /**
- * Numeric-keypad entry limited to [maxDigits] digits and (optionally) a maximum value.
- * The field starts with the current value selected so typing replaces it.
+ * Number entry with the app's own big-key keypad (no system keyboard), limited to [maxDigits]
+ * digits and [maxValue]. The current value is shown highlighted: the first key pressed replaces
+ * it. On short (landscape) screens the keypad moves beside the readout and buttons.
  */
 @Composable
 fun NumberEntryDialog(
@@ -222,35 +224,143 @@ fun NumberEntryDialog(
     onDismiss: () -> Unit,
 ) {
     var text by remember { mutableStateOf(initial.toString()) }
+    var replaceNext by remember { mutableStateOf(true) }
     val value = text.toIntOrNull()
     val tooBig = value != null && value > maxValue
     val valid = value != null && !tooBig
     val submit = { if (valid) onSubmit(value!!) }
 
+    val onDigit: (Char) -> Unit = { d ->
+        val base = if (replaceNext) "" else text
+        replaceNext = false
+        text = when {
+            base == "0" -> d.toString() // no leading zeros
+            base.length >= maxDigits -> base
+            else -> base + d
+        }
+    }
+    val onBackspace = {
+        text = if (replaceNext) "" else text.dropLast(1)
+        replaceNext = false
+    }
+    val onClear = {
+        text = ""
+        replaceNext = false
+    }
+
+    val shortScreen = LocalConfiguration.current.screenHeightDp < 500
+
     Dialog(onDismissRequest = onDismiss, properties = DialogProps) {
-        DialogCard(title) {
-            LabeledField(
-                label, text, maxDigits, { text = it },
-                keyboardType = KeyboardType.Number,
-                allowed = { it in '0'..'9' },
-                autoFocus = true,
-                selectAll = true,
-                showCounter = false,
-                onDone = { submit() },
-            )
-            if (tooBig) {
-                Text(
-                    "Maximum is $maxValue",
-                    fontSize = 16.sp, fontWeight = FontWeight.Black, color = AlertRed,
+        DialogCard(title, maxWidth = if (shortScreen) 720.dp else 560.dp) {
+            if (shortScreen) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        NumberReadout(label, text, highlighted = replaceNext, height = 72.dp)
+                        if (tooBig) MaxValueError(maxValue)
+                        DialogButtons(
+                            confirmText = "SET",
+                            confirmEnabled = valid,
+                            onConfirm = submit,
+                            onCancel = onDismiss,
+                        )
+                    }
+                    Keypad(
+                        keyHeight = 52.dp,
+                        onDigit = onDigit,
+                        onClear = onClear,
+                        onBackspace = onBackspace,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            } else {
+                NumberReadout(label, text, highlighted = replaceNext, height = 88.dp)
+                if (tooBig) MaxValueError(maxValue)
+                Keypad(
+                    keyHeight = 76.dp,
+                    onDigit = onDigit,
+                    onClear = onClear,
+                    onBackspace = onBackspace,
+                )
+                DialogButtons(
+                    confirmText = "SET",
+                    confirmEnabled = valid,
+                    onConfirm = submit,
+                    onCancel = onDismiss,
                 )
             }
-            DialogButtons(
-                confirmText = "SET",
-                confirmEnabled = valid,
-                onConfirm = { submit() },
-                onCancel = onDismiss,
+        }
+    }
+}
+
+@Composable
+private fun MaxValueError(maxValue: Int) {
+    Text(
+        "Maximum is $maxValue",
+        fontSize = 16.sp, fontWeight = FontWeight.Black, color = AlertRed,
+    )
+}
+
+/** The number being typed, in a large box. Yellow while it is the old value waiting to be replaced. */
+@Composable
+private fun NumberReadout(label: String, text: String, highlighted: Boolean, height: Dp) {
+    val shape = RoundedCornerShape(8.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Black, color = Ink)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(height)
+                .background(if (highlighted) SignalYellow else Paper, shape)
+                .border(BorderWidth, Ink, shape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text.ifEmpty { "--" },
+                fontSize = 56.sp,
+                fontWeight = FontWeight.Black,
+                color = if (text.isEmpty()) DisabledInk else Ink,
+                maxLines = 1,
             )
         }
+    }
+}
+
+/** 3 x 4 numeric keypad: 1-9, then CLR / 0 / DEL. */
+@Composable
+private fun Keypad(
+    keyHeight: Dp,
+    onDigit: (Char) -> Unit,
+    onClear: () -> Unit,
+    onBackspace: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf("123", "456", "789").forEach { digits ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                digits.forEach { d ->
+                    KeypadKey(d.toString(), keyHeight, Modifier.weight(1f)) { onDigit(d) }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            KeypadKey("CLR", keyHeight, Modifier.weight(1f), textSize = 22, container = DisabledFill, onClick = onClear)
+            KeypadKey("0", keyHeight, Modifier.weight(1f)) { onDigit('0') }
+            KeypadKey("DEL", keyHeight, Modifier.weight(1f), textSize = 22, container = DisabledFill, onClick = onBackspace)
+        }
+    }
+}
+
+@Composable
+private fun KeypadKey(
+    text: String,
+    height: Dp,
+    modifier: Modifier,
+    textSize: Int = 36,
+    container: Color = Paper,
+    onClick: () -> Unit,
+) {
+    BigButton(onClick = onClick, modifier = modifier, container = container, minHeight = height) {
+        ButtonText(text, it, size = textSize)
     }
 }
 
@@ -291,6 +401,7 @@ fun NoteDialog(
                 LabeledField(
                     "CUSTOM NOTE", custom, PileSession.MAX_NOTE, { custom = it },
                     modifier = Modifier.weight(1f),
+                    lines = 3,
                     onDone = { if (canAdd) onSubmit(custom) },
                 )
                 BigButton(

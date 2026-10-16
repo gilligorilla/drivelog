@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -28,8 +27,6 @@ import com.example.drivelog.session.SessionState
 import com.example.drivelog.ui.theme.AlertRed
 import com.example.drivelog.ui.theme.Ink
 import com.example.drivelog.ui.theme.Paper
-import com.example.drivelog.ui.theme.PlayGreen
-import com.example.drivelog.ui.theme.StopRed
 
 /** Which popup (if any) is currently open over the main screen. */
 private enum class Overlay { NONE, DETECTOR, DEPTH, BPF, STROKE, NOTE, INCHES, SPLICE, FINALIZE }
@@ -85,10 +82,11 @@ fun MainScreen(
         }
         val chart: @Composable (Modifier) -> Unit = { m ->
             ProfilePlot(
-                title = "BPF vs DEPTH (ft)",
                 points = state.points,
                 xValue = { it.bpf },
                 fixedXAxis = null,
+                xLabel = "BPF",
+                yLabel = "DEPTH",
                 minXTop = 100f,
                 modifier = m,
             )
@@ -192,14 +190,13 @@ private fun ControlPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            BigButton(
-                onClick = onToggleSession,
-                container = if (active) StopRed else PlayGreen,
-                content = Paper,
-                description = if (active) "Stop" else "Play",
-                minHeight = buttonH,
-                modifier = Modifier.width(112.dp),
-            ) { color -> if (active) StopIcon(color) else PlayIcon(color) }
+            BigSwitch(
+                checked = active,
+                onToggle = onToggleSession,
+                width = 112.dp,
+                height = buttonH,
+                description = "Pile session",
+            )
             Text(
                 text = state.pileName,
                 color = Ink,
@@ -243,15 +240,9 @@ private fun ControlPanel(
 
         // ---- Logging pages
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BigButton(onClick = onInches, enabled = active, minHeight = buttonH, modifier = Modifier.weight(1f)) {
-                ButtonText("INCHES", it, size = 20)
-            }
-            BigButton(onClick = onSplice, enabled = active, minHeight = buttonH, modifier = Modifier.weight(1f)) {
-                ButtonText("SPLICE", it, size = 20)
-            }
-            BigButton(onClick = onNote, enabled = active, minHeight = buttonH, modifier = Modifier.weight(1f)) {
-                ButtonText("NOTE", it, size = 20)
-            }
+            ActionButton("INCHES", onInches, Modifier.weight(1f), enabled = active, height = buttonH)
+            ActionButton("SPLICE", onSplice, Modifier.weight(1f), enabled = active, height = buttonH)
+            ActionButton("NOTE", onNote, Modifier.weight(1f), enabled = active, height = buttonH)
         }
 
         StatusLine(state)
