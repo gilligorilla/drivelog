@@ -27,6 +27,7 @@ import com.example.drivelog.session.SessionState
 import com.example.drivelog.ui.theme.AlertRed
 import com.example.drivelog.ui.theme.Ink
 import com.example.drivelog.ui.theme.Paper
+import com.example.drivelog.ui.theme.StopRed
 
 /** Which popup (if any) is currently open over the main screen. */
 private enum class Overlay { NONE, DETECTOR, DEPTH, BPF, STROKE, NOTE, INCHES, SPLICE, FINALIZE }
@@ -83,11 +84,16 @@ fun MainScreen(
         val chart: @Composable (Modifier) -> Unit = { m ->
             ProfilePlot(
                 points = state.points,
-                xValue = { it.bpf },
-                fixedXAxis = null,
-                xLabel = "BPF",
+                primary = PlotSeries(label = "BPF", xValue = { it.bpf }, minTop = 100f),
+                secondary = PlotSeries(
+                    label = "STROKE",
+                    xValue = { it.strokeInches },
+                    color = StopRed,
+                    fixedAxis = Axis(top = PileSession.STROKE_MAX.toFloat(), step = 12f),
+                    lineWidth = 2.dp,
+                    markerRadius = 3.5.dp,
+                ),
                 yLabel = "DEPTH",
-                minXTop = 100f,
                 modifier = m,
             )
         }
