@@ -19,11 +19,10 @@ object Storage {
     const val LOG_SUBDIR = "DriveLog"
 
     val DEFAULT_PRESETS = listOf(
-        "Change cushion",
-        "Stop for splice",
-        "Setcheck",
-        "Adjust hammer alignment",
-        "Predrill",
+        "New cushion",
+        "Stop for weather",
+        "Stop for equipment problem",
+        "Stop to align hammer",
     )
 
     /** Whether the app may read/write the shared Documents folder directly. */
