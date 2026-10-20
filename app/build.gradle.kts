@@ -44,9 +44,10 @@ android {
             if (keystoreProps.isNotEmpty()) {
                 signingConfig = signingConfigs.getByName("release")
             }
+            // Standard whole-app R8 (shrink + optimize + obfuscate). The wizard default of limiting
+            // optimization to androidx/kotlin packages produced an IllegalAccessError at startup.
             optimization {
                 enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }
         }
     }
